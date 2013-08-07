@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -55,7 +56,9 @@ public class FinleyBreeseActivity extends Activity {
         if (logging == true)
         	Log.v(TAG, "entered onCreate");
 
-        // Populate a hash with keys of ringtone URIs and values of ringtone names
+        // Populate a ringtone hash
+        // key: name of ringtone
+        // value: ringtone URI
     	RingtoneManager rtm = new RingtoneManager(this);
     	rtm.setType(RingtoneManager.TYPE_RINGTONE);
     	Cursor rtc = rtm.getCursor();
@@ -118,46 +121,13 @@ public class FinleyBreeseActivity extends Activity {
     		Log.v(TAG, "entered onResume");
     	// activity is currently on the top of the stack, with user activity
 		String rtstring;
-    	File rtpath;
-
-		// Confirm availability of external storage.
-		boolean mExternalStorageAvailable = false;
-		boolean mExternalStorageWriteable = false;
-		String state = Environment.getExternalStorageState();
-		
-		if (Environment.MEDIA_MOUNTED.equals(state)) {
-			// We can read and write the media
-			Log.d(TAG, "media mounted");
-			rtpath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES);
-			mExternalStorageAvailable = mExternalStorageWriteable = true;
-		} else if (Environment.MEDIA_MOUNTED_READ_ONLY.equals(state)) {
-			// We can only read the media
-			Log.w(TAG, "media mounted read only");
-			rtpath = new File("/sdcard/");
-			mExternalStorageAvailable = true;
-			mExternalStorageWriteable = false;
-		} else {
-			// Something else is wrong
-			Log.e(TAG, "external storage unavailable");
-			rtpath = new File("/sdcard/");
-			mExternalStorageAvailable = mExternalStorageWriteable = false;
-		}
-		if (rtpath.exists()) {
-			if (rtpath.isDirectory()) {
-					Log.v(TAG, "rtpath is a directory");
-			} else {
-					Log.e(TAG, "rtpath is not a directory!");
-			}
-		} else {
-			rtpath.mkdirs();
-			Log.w(TAG, "created rtpath directory");
-		}
+    	File rtpath = getRingtoneDir();
 		
         // Create a regular expression pattern that matches the expected string
 		// \uFF1A is "full width colon".
 		// The space after the colon is optional.
 		// The character set in the group should include all Morse characters.
-    	String NotesRegex = "ringtone[:\uFF1A][ ?]([A-Za-z0-9 ]*)";
+    	String NotesRegex = "[Rr]ingtone[:\uFF1A] ?([A-Za-z0-9 ]*)";
     	Pattern pattern = Pattern.compile(NotesRegex);
 
         // query the contacts list
@@ -173,26 +143,30 @@ public class FinleyBreeseActivity extends Activity {
     				// Log.v(TAG, "has no notes");
     				continue;
     			} else {
-    				Log.v(TAG, "has notes: " + pnotes);
+    				// Log.v(TAG, "has notes: " + pnotes);
+    				pnotes = pnotes.toLowerCase(Locale.US);
     			}
     			// do their notes contain the matching string?
     			Matcher matcher = pattern.matcher(pnotes);
 				if (matcher.matches()) { 
-    				Log.v(TAG, " - notes match regular expression");
     				rtstring = matcher.group(1);
-    				Log.v(TAG, " - suggested ringtone is " + rtstring);
+    				if (logging == true)
+    					Log.d(TAG, " - notes match RE, suggested ringtone is " + rtstring);
     			} else {
-    				Log.v(TAG, " - notes do not match regular expression");
+    				if (logging == true)
+    					Log.v(TAG, " - notes do not match RE");
     				continue;
     			}
+				
     			// does a ringtone exist that matches the ringtone string?
     			if (rthash.containsKey(rtstring)) {
-    				Log.v(TAG, "ringtone exists, does not need to be created");
+    				if (logging == true)
+    					Log.d(TAG, "ringtone exists, does not need to be created");
     			} else {
-    				Log.v(TAG, "ringtone does not exist, create one");
+    				if (logging == true)
+    					Log.d(TAG, "ringtone does not exist, create one");
     				// generate the List<Byte> representing the waveform
     				String rtcode = tomorse(rtstring);
-    				Log.v(TAG, " - created code string of length " + (rtcode.length()/4));
     				// TODO: save as .ogg/.wav/.mp3/*something*
     				// JMT - stolen from ringdroid
     				File rtfile = new File(rtpath, rtstring + ".wav");
@@ -200,30 +174,32 @@ public class FinleyBreeseActivity extends Activity {
     				try {
 						writeFile(rtfile, rtcode);
 					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-	    				Log.v(TAG, " exiting before corrupting hash or assigning ringtone!");
+	    				Log.e(TAG, " exiting before corrupting hash or assigning ringtone! ", e);
 	    				continue;
 					}
-    				// generate new rturi
-					// add it to the hash
-    				//rthash.put(rtstring, newrturi);
+    				// add it to the hash
+    				rthash.put(rtstring, rtfile.getAbsolutePath());
     			}
     			// do they already have a custom ringtone?
     			String pcrt = pc.getString(pc.getColumnIndex(Contacts.PeopleColumns.CUSTOM_RINGTONE));
     			if (pcrt == null) {
-        			Log.v(TAG, " - has no custom ringtone");
+    				if (logging == true)
+    					Log.v(TAG, " - has no custom ringtone");
         		} else {
-        			Log.v(TAG, " - has a custom ringtone = " + pcrt);
+        			if (logging == true)
+        				Log.v(TAG, " - has a custom ringtone = " + pcrt);
         			// is the existing custom ringtone the correct ringtone?
         			if (pcrt.equals(rthash.get(rtstring))) {
-        				Log.v(TAG, " - custom ringtone is correct ringtone");
+        				if (logging == true)
+        					Log.v(TAG, " - custom ringtone is correct ringtone");
         				continue;
         			} else {
-        				Log.v(TAG, " - custom ringtone is not correct ringtone");
+        				if (logging == true)
+        					Log.v(TAG, " - custom ringtone is not correct ringtone");
         			}
         		}
-    			Log.v(TAG, "assign proper ringtone to contact");
+    			if (logging == true)
+    				Log.v(TAG, "assign proper ringtone to contact");
     			// JMT - stolen from ringdroid
     			Uri puri = Uri.withAppendedPath(People.CONTENT_URI, pc.getString(pc.getColumnIndex(People._ID)));
     			ContentValues pvalues = new ContentValues();
@@ -259,6 +235,48 @@ public class FinleyBreeseActivity extends Activity {
     	super.onDestroy();
     	if (logging == true)
     		Log.v(TAG, "entered onDestroy");
+    }
+    
+    /** Returns the location where ringtones should be saved. */
+    protected File getRingtoneDir() {
+    	File rtpath;
+    	
+		// boolean mExternalStorageAvailable = false;
+		// boolean mExternalStorageWriteable = false;
+    	String badDefault = "/sdcard/";
+		String state = Environment.getExternalStorageState();
+		
+		if (Environment.MEDIA_MOUNTED.equals(state)) {
+			// We can read and write the media
+			if (logging == true)
+				Log.d(TAG, "media mounted");
+			rtpath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES);
+			// mExternalStorageAvailable = mExternalStorageWriteable = true;
+		} else if (Environment.MEDIA_MOUNTED_READ_ONLY.equals(state)) {
+			// We can only read the media
+			Log.w(TAG, "media mounted read only");
+			rtpath = new File(badDefault);
+			// mExternalStorageAvailable = true;
+			// mExternalStorageWriteable = false;
+		} else {
+			// Something else is wrong
+			Log.e(TAG, "external storage unavailable");
+			rtpath = new File(badDefault);
+			// mExternalStorageAvailable = mExternalStorageWriteable = false;
+		}
+		if (rtpath.exists()) {
+			if (rtpath.isDirectory()) {
+				if (logging == true)
+					Log.v(TAG, "rtpath is a directory");
+			} else {
+				Log.e(TAG, "rtpath is not a directory!");
+			}
+		} else {
+			rtpath.mkdirs();
+			Log.w(TAG, "created rtpath directory");
+		}
+	
+		return rtpath;
     }
     
     /** Constructs the dit, dah, and space elements. */
@@ -326,54 +344,54 @@ public class FinleyBreeseActivity extends Activity {
 		// construct hashmap
 		morse.put('a', ".-");
 		morse.put('b', "-...");
-		morse.put('c',"-.-."); 
-		morse.put('d',"-..");
-		morse.put('e',".");
-		morse.put('f',"..-.");
-		morse.put('g',"--.");
-		morse.put('h',"....");
-		morse.put('i',"..");
-		morse.put('j',".---");
-		morse.put('k',"-.-");
-		morse.put('l',".-..");
-		morse.put('m',"--");
-		morse.put('n',"-.");
-		morse.put('o',"---");
-		morse.put('p',".--.");
-		morse.put('q',"--.-");
-		morse.put('r',".-.");
-		morse.put('s',"...");
-		morse.put('t',"-");
-		morse.put('u',"..-");
-		morse.put('v',"...-");
-		morse.put('w',".--");
-		morse.put('x',"-..-");
-		morse.put('y',"-.--");
-		morse.put('z',"--..");
-		morse.put('0',"-----");
-		morse.put('1',".----");
-		morse.put('2',"..---");
-		morse.put('3',"...--");
-		morse.put('4',"....-");
-		morse.put('5',".....");
-		morse.put('6',"-....");
-		morse.put('7',"--...");
-		morse.put('8',"---..");
-		morse.put('9',"----.");
-		morse.put('.',".-.-.-");
-		morse.put(',',"--..--");
-		morse.put('?',"..--..");
-		morse.put(':',"---...");
-		morse.put(';',"-.-.-.");
-		morse.put('-',"-....-");
-		morse.put('/',"-..-.");
-		morse.put('\"',".-..-.");
-		morse.put('+',".-.-.");
-		morse.put('|',".-...");
-		morse.put('>',"-.--.");
-		morse.put('~',"...-.-");
-		morse.put('=',"-...-");
-		morse.put('@',".--.-.");
+		morse.put('c', "-.-."); 
+		morse.put('d', "-..");
+		morse.put('e', ".");
+		morse.put('f', "..-.");
+		morse.put('g', "--.");
+		morse.put('h', "....");
+		morse.put('i', "..");
+		morse.put('j', ".---");
+		morse.put('k', "-.-");
+		morse.put('l', ".-..");
+		morse.put('m', "--");
+		morse.put('n', "-.");
+		morse.put('o', "---");
+		morse.put('p', ".--.");
+		morse.put('q', "--.-");
+		morse.put('r', ".-.");
+		morse.put('s', "...");
+		morse.put('t', "-");
+		morse.put('u', "..-");
+		morse.put('v', "...-");
+		morse.put('w', ".--");
+		morse.put('x', "-..-");
+		morse.put('y', "-.--");
+		morse.put('z', "--..");
+		morse.put('0', "-----");
+		morse.put('1', ".----");
+		morse.put('2', "..---");
+		morse.put('3', "...--");
+		morse.put('4', "....-");
+		morse.put('5', ".....");
+		morse.put('6', "-....");
+		morse.put('7', "--...");
+		morse.put('8', "---..");
+		morse.put('9', "----.");
+		morse.put('.', ".-.-.-");
+		morse.put(',', "--..--");
+		morse.put('?', "..--..");
+		morse.put(':', "---...");
+		morse.put(';', "-.-.-.");
+		morse.put('-', "-....-");
+		morse.put('/', "-..-.");
+		morse.put('\"', ".-..-.");
+		morse.put('+', ".-.-.");
+		morse.put('|', ".-...");
+		morse.put('>', "-.--.");
+		morse.put('~', "...-.-");
+		morse.put('=', "-...-");
+		morse.put('@', ".--.-.");
     }
     
     /** Builds the list of bytes from the text. */
@@ -385,43 +403,51 @@ public class FinleyBreeseActivity extends Activity {
 		String letter;
 		int lastel;
 		int spaceflag = 1;
-		CharacterIterator it = new StringCharacterIterator(input.toLowerCase());
+		CharacterIterator it = new StringCharacterIterator(input);
 		CharacterIterator it2;
 	    
 	    for (char ch = it.first(); ch != CharacterIterator.DONE; ch = it.next()) {
 	    	Log.v(TAG, " - character is " + ch);
 	        if (Character.isWhitespace(ch) && spaceflag == 0) {
 	        	// append iws to output
-	        	Log.v(TAG, "append iws to output");
+	        	if (logging == true)
+	        		Log.v(TAG, "append iws to output");
 	        	output += "iws ";
 	        	spaceflag = 1;
 	        } else {
 	        	if (morse.containsKey(ch)) {
 	        		letter = morse.get(ch);
-	        		Log.v(TAG, " - morse contains key " + ch + ", value is " + letter);
+	        		if (logging == true)
+	        			Log.v(TAG, " - morse contains key " + ch + ", value is " + letter);
 	        		if (spaceflag == 0) {
 	        			// append ics to output
-	    	        	Log.v(TAG, "append ics to output");
+	        			if (logging == true)
+	        				Log.v(TAG, "append ics to output");
 	        			output += "ics ";
 	        		} else
 	        			spaceflag = 0;
 	        		lastel = letter.length() - 1;
 	        		it2 = new StringCharacterIterator(letter);
 	        		for (char el = it2.first(); el != CharacterIterator.DONE; el = it2.next()) {
-	        			Log.v(TAG, " - morse character is " + el);
+	        			if (logging == true)
+	        				Log.v(TAG, " - morse character is " + el);
 	        			if (el == '.') {
 	        				// append dit to output
-	        	        	Log.v(TAG, "append dit to output");
+	        	        	if (logging == true)
+	        	        		Log.v(TAG, "append dit to output");
 	        				output += "dit ";
 	        			} else {
 	        				// append dah to output
-	        	        	Log.v(TAG, "append dah to output");
+	        	        	if (logging == true)
+	        	        		Log.v(TAG, "append dah to output");
 	        				output += "dah ";
 	        			}
-	        			Log.v(TAG, "it2.getIndex() is " + it2.getIndex() + ", lastel is " + lastel);
+	        			if (logging == true)
+	        				Log.v(TAG, "it2.getIndex() is " + it2.getIndex() + ", lastel is " + lastel);
 	        			if (it2.getIndex() != lastel) {
 	        				// append ies to output
-	        	        	Log.v(TAG, "append ies to output");
+	        	        	if (logging == true)
+	        	        		Log.v(TAG, "append ies to output");
 		        			output += "ies ";
 	        			} 
 	        		}
@@ -439,14 +465,13 @@ public class FinleyBreeseActivity extends Activity {
     	
     	// split the code string up into elements
     	String[] splitcode = code.split(" ");
-    	Log.v(TAG, "code split into " + splitcode.length + " elements");
+    	if (logging == true)
+    		Log.v(TAG, "code split into " + splitcode.length + " elements");
     	
     	// JMT: stolen from ringdroid
     	// create the file
     	file.createNewFile();
-    	Log.v(TAG, "create new file");
 		FileOutputStream out = new FileOutputStream(file);
-		Log.v(TAG, "create new fileoutputstream");
 		
 		// generate length values
 		long totalAudioLen = 0;
@@ -465,7 +490,8 @@ public class FinleyBreeseActivity extends Activity {
 				Log.e(TAG, "bad value in splitcode: " + s);
 			}
 		}
-		Log.v(TAG, "calculated total audio length: " + totalAudioLen);
+		if (logging == true)
+			Log.v(TAG, "calculated total audio length: " + totalAudioLen);
 		
 		// previous answer given in bytes, need samples
 		totalAudioLen /= 2;
@@ -520,7 +546,6 @@ public class FinleyBreeseActivity extends Activity {
         header[42] = (byte) ((totalAudioLen >> 16) & 0xff);
         header[43] = (byte) ((totalAudioLen >> 24) & 0xff);
         out.write(header, 0, 44);
-        Log.v(TAG, "out write header succeeded");
         
     	// write the data
 		for (String s : splitcode) {
@@ -539,6 +564,5 @@ public class FinleyBreeseActivity extends Activity {
 			}
 		}
         out.close();
-        Log.v(TAG, "out close succeeded");
     }
 }
