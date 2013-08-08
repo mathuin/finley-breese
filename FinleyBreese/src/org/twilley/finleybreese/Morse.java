@@ -63,12 +63,12 @@ public class Morse {
 	
 	// private constants
 	// default values for instance variables
-	private static final int DEFAULT_PITCH = 880;
+	private static final int DEFAULT_PITCH = 800;
 	private static final int DEFAULT_CSPEED = 20;
 	private static final int DEFAULT_SPEED = 13;
 	private static final int DEFAULT_BITWIDTH = 32;
 	private static final int DEFAULT_SAMPLERATE = 44100;
-	private static final int DEFAULT_CHANNELS = 1;
+	private static final int DEFAULT_CHANNELS = 2;
 	
 	// the length of the word 'paris' in dits
 	private static final int PARIS_LENGTH = 50;
@@ -179,8 +179,7 @@ public class Morse {
 	private byte[] tone(int length, int frequency) {
 		int samplewidth = bitwidth/8;
 		byte[] mytone = new byte[length * channels * samplewidth];
-		int grade = (int) (SLOPE * MAX_AMPLITUDE * samplerate);
-		int last = length - grade;
+		double grade = SLOPE * MAX_AMPLITUDE * samplerate;
 		double maxvalue = MAX_AMPLITUDE * Math.pow(2, bitwidth-1); 
 
 		for (int index = 0; index < length; index++) {
@@ -188,7 +187,7 @@ public class Morse {
 				double elem = maxvalue * Math.sin(frequency * Math.PI * 2 * index / samplerate);
 				if (index < grade)
 					elem *= (index / grade);
-				else if (index > last);
+				else if ((length - index) < grade)
 					elem *= ((length - index) / grade);
 				for (int s = 0; s < samplewidth; s++)
 					mytone[(channels * index + c) * samplewidth + s] = (byte) (((int) elem >> (8 * s)) & 0xff);

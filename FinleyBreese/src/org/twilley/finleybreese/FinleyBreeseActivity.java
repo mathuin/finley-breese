@@ -2,10 +2,7 @@ package org.twilley.finleybreese;
 
 import org.twilley.finleybreese.Morse;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.text.CharacterIterator;
-import java.text.StringCharacterIterator;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -13,7 +10,6 @@ import java.util.regex.Pattern;
 
 import android.app.Activity;
 import android.content.ContentValues;
-import android.content.res.Resources;
 import android.database.Cursor;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -23,6 +19,7 @@ import android.provider.Contacts;
 import android.provider.Contacts.People;
 import android.util.Log;
 
+@SuppressWarnings("deprecation")
 public class FinleyBreeseActivity extends Activity {
     private static final String TAG = "FinleyBreese";
 	private static boolean logging = true;
@@ -60,34 +57,8 @@ public class FinleyBreeseActivity extends Activity {
     			Log.w(TAG, "no ringtones found");
     	}
     	
-    	// resource access
-    	Resources res;
-    	// resource values
-    	int bitwidth;
-    	int samplerate;
-    	int channels;
-    	int pitch;
-    	int cspeed;
-    	int speed;
-    	int lenies;
-    	int lenics;
-    	int leniws;
-
-    	// deal with resources
-    	res = getResources();
-    	int[] statsarr = res.getIntArray(R.array.stats);
-    	bitwidth = statsarr[0];
-    	samplerate = statsarr[1];
-    	channels = statsarr[2];
-    	pitch = statsarr[3];
-    	cspeed = statsarr[4];
-    	speed = statsarr[5];
-    	lenies = statsarr[6];
-    	lenics = statsarr[7];
-    	leniws = statsarr[8];
-    	
     	// Build Morse object
-    	// myMorse = new Morse(pitch, cpseed, speed, bitwidth, samplerate, channels);
+    	// myMorse = new Morse(pitch, cspeed, speed, bitwidth, samplerate, channels);
     	myMorse = new Morse();
     }
 
