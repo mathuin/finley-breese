@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="hello">Hello World!</string>
     <string name="app_name">Finley Breese</string>
     <string name="action_settings">Settings</string>
+    <string name="saved_pitch">Pitch</string>
+    <string name="saved_cspeed">Character Speed</string>
+    <string name="saved_speed">Speed</string>
+    <string name="saved_bitwidth">Bit Width</string>
+    <string name="saved_samplerate">Sample Rate</string>
+    <string name="final_title">Fatal Exception Occurred</string><string name="saved_channels">Channels</string>
+    
+    <string name="ok">OK</string>
+    <string name="main_message">When the button below is pressed, all contacts with &quot;ringtone: foo&quot; in their notes will have their custom ringtones set to the Morse code for &quot;foo&quot;.  This is a placeholder until someone smarter than me comes up with a better way to do this! </string>
 </resources>
