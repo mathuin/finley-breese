@@ -26,6 +26,8 @@ import android.support.v4.app.LoaderManager;
 import android.support.v4.content.CursorLoader;
 import android.support.v4.content.Loader;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.Toast;
 
 public class FinleyBreeseActivity extends FragmentActivity implements LoaderManager.LoaderCallbacks<Cursor> {
@@ -72,8 +74,6 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     	sharedPref = this.getPreferences(Context.MODE_PRIVATE);
     	editor = sharedPref.edit();
 
-        getSupportLoaderManager().initLoader(LOADER_ID, null, this);
-
         // thank you ringdroid
         rtpath = getRingtoneDir();
 		String status = Environment.getExternalStorageState();
@@ -91,11 +91,19 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 			return;
 		}
 
-    	// Build Morse object
-		// TODO: consider Toast if this takes noticeable amounts of time
+		// Build Morse object
+		Toast.makeText(this, "Generating waveforms...", Toast.LENGTH_SHORT).show();
 		myMorse = buildMorseFromPreferences();
+		Toast.makeText(this, "Waveform generation complete!", Toast.LENGTH_SHORT).show();
 		
-		// throw up the button here, but it won't do crap.
+		// Configure button!
+		Button button = (Button) findViewById(R.id.button1);
+	
+		button.setOnClickListener(new View.OnClickListener() {
+			public void onClick(View v) {
+		        getSupportLoaderManager().initLoader(LOADER_ID, null, FinleyBreeseActivity.this);
+			}
+		});
 		
     }
 
@@ -157,9 +165,9 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     	// step one: include notes in projection
     	// step two: only match if notes match regular expression
     	String[] projection = {RawContacts._ID, RawContacts.ACCOUNT_NAME, RawContacts.CUSTOM_RINGTONE};
-    	String selection = null;
-    	String[] selectionargs = null;
-    	String sortorder = null;
+    	String selection = "";
+    	String[] selectionargs = {""};
+    	String sortorder = "";
     	return new CursorLoader(this, RawContacts.CONTENT_URI, projection, selection, selectionargs, sortorder);
     }
     
@@ -167,33 +175,29 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     public void onLoadFinished(Loader<Cursor> cursorLoader, Cursor cursor) {
     	if (logging == true)
     		Log.v(TAG, "onLoadFinished entered");
-    	
-    	// This will be either:
-    	// enabling the button
-    	// or 
-    	// doing the work
     	String rtstring;
         
     	// Create a regular expression pattern that matches the expected string
   		// \uFF1A is "full width colon".
   		// The space after the colon is optional.
   		// The character set in the group should include all Morse characters.
-      	String NotesRegex = "[Rr]ingtone[:\uFF1A] ?(.*)";
+      	String NotesRegex = "ringtone[:\uFF1A] ?(.*)";
       	Pattern pattern = Pattern.compile(NotesRegex);
 
-    	if (cursor != null && cursor.moveToFirst()) {
-    		while (!cursor.isAfterLast()) {
+    	if (cursor != null && cursor.getCount() > 0) {
+    		Log.v(TAG, "oh please yes yes");
+    		for (cursor.moveToFirst(); !cursor.isAfterLast(); cursor.moveToNext()) {
     			String rawContactId = cursor.getString(0);
     			String rawContactName = cursor.getString(1);
     			String rawContactCustomRingtone = cursor.getString(2);
     			// get notes if any -- remove if step one complete
-    			String notes = null;
+    			String notes = "";
     			Cursor noteCursor = null;
     			try {
     				String [] projection = new String[] {Data._ID, Note.NOTE};
     				String selection = Data.RAW_CONTACT_ID + "=?" + " AND " + Data.MIMETYPE + "='" + Note.CONTENT_ITEM_TYPE + "'";
     				String[] selectionargs = new String[] {rawContactId};
-    				String sortorder = null;
+    				String sortorder = "";
     				noteCursor = getContentResolver().query(Data.CONTENT_URI, projection, selection, selectionargs, sortorder); 
     				if (noteCursor != null && noteCursor.moveToFirst()) {
     					while (!noteCursor.isAfterLast()) {
@@ -207,8 +211,8 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     			}
     			// no notes, don't bother
     			// TODO: learn how to jam this crap into initial search thing!
-    			if (notes == null)
-    				continue;
+    			if (notes == "")
+    				continue;// MAGIC
     			
     			// now that we have the notes, lowercase 'em.
     			notes = notes.toLowerCase(Locale.US);
@@ -222,7 +226,7 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     					Log.d(TAG, " - notes match RE, suggested ringtone is " + rtstring);
     			} else {
     				if (logging == true)
-    					Log.v(TAG, " - notes do not match RE");
+    					Log.v(TAG, " - notes do not match RE, notes are " + notes);
     				continue;
     			}
 				
@@ -232,7 +236,7 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 				
 				// if file exists, we presume it is correct!
 				if (rtfile.exists()) {
-    				if (rawContactCustomRingtone.equals(rtpath))
+    				if (rawContactCustomRingtone != "" && rawContactCustomRingtone.equals(rtpath))
     					continue;
     			} else {
     				// build ringtone
@@ -253,9 +257,10 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     			getContentResolver().update(RawContacts.CONTENT_URI, values, null, null);
     			
     			Toast.makeText(this, "Ringtone set for " + rawContactName, Toast.LENGTH_SHORT).show();
-    			cursor.moveToNext();
     		}
     	}
+    	if (logging == true)
+    		Log.v(TAG, "onLoadFinished exited");
     }
     
     /** implementing onLoaderReset */

@@ -238,6 +238,7 @@ public class Morse {
 	
 	// construct WAV file 
 	private void writeFile(File file, byte[] samples) throws IOException {
+		file.getParentFile().mkdirs();
 		file.createNewFile();
 		FileOutputStream out = new FileOutputStream(file);
 				
