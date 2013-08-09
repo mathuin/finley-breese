@@ -50,7 +50,6 @@ public class Morse {
 		writeFile(file, samples);
 	}
 	
-	
 	// public nested classes and interfaces
 	
 	// package interface
@@ -77,7 +76,7 @@ public class Morse {
 	private static final double MAX_AMPLITUDE = 0.85;
 	// how many seconds from zero to max amplitude
 	private static final double SLOPE = 0.005;
-	
+
 	// private class variable
 	private static final HashMap<Character, String> chardict = initializeChardict();
 		

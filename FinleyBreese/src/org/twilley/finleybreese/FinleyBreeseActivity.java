@@ -9,15 +9,19 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentValues;
+import android.content.DialogInterface;
 import android.database.Cursor;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Contacts;
 import android.provider.Contacts.People;
 import android.util.Log;
+import android.widget.Toast;
 
 @SuppressWarnings("deprecation")
 public class FinleyBreeseActivity extends Activity {
@@ -28,6 +32,8 @@ public class FinleyBreeseActivity extends Activity {
 	private HashMap<String, String> rthash = new HashMap<String, String>();
 	private Morse myMorse;
 	
+	File rtpath;
+	
 	/** Called when the activity is first created. */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,6 +41,23 @@ public class FinleyBreeseActivity extends Activity {
         setContentView(R.layout.main);
         if (logging == true)
         	Log.v(TAG, "entered onCreate");
+
+        // thank you ringdroid
+    	rtpath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES);
+		String status = Environment.getExternalStorageState();
+		
+		if (status.equals(Environment.MEDIA_MOUNTED_READ_ONLY)) {
+			showFinalAlert("Media mounted read only");
+			return;
+		}
+		if (status.equals(Environment.MEDIA_SHARED)) {
+			showFinalAlert("Media shared");
+			return;
+		}
+		if (!status.equals(Environment.MEDIA_MOUNTED)) {
+			showFinalAlert("No SD Card Found");
+			return;
+		}
 
         // Populate a ringtone hash
         // key: name of ringtone
@@ -86,13 +109,12 @@ public class FinleyBreeseActivity extends Activity {
     		Log.v(TAG, "entered onResume");
     	// activity is currently on the top of the stack, with user activity
 		String rtstring;
-    	File rtpath = getRingtoneDir();
 		
         // Create a regular expression pattern that matches the expected string
 		// \uFF1A is "full width colon".
 		// The space after the colon is optional.
 		// The character set in the group should include all Morse characters.
-    	String NotesRegex = "[Rr]ingtone[:\uFF1A] ?([A-Za-z0-9 ]*)";
+    	String NotesRegex = "[Rr]ingtone[:\uFF1A] ?(.*)";
     	Pattern pattern = Pattern.compile(NotesRegex);
 
         // query the contacts list
@@ -162,10 +184,12 @@ public class FinleyBreeseActivity extends Activity {
     			if (logging == true)
     				Log.v(TAG, "assign proper ringtone to contact");
     			// JMT - stolen from ringdroid
-    			Uri puri = Uri.withAppendedPath(People.CONTENT_URI, pc.getString(pc.getColumnIndex(People._ID)));
+    			Uri puri = Uri.withAppendedPath(getContactContentUri(), pc.getString(pc.getColumnIndex(People._ID)));
     			ContentValues pvalues = new ContentValues();
     			pvalues.put(People.CUSTOM_RINGTONE, rthash.get(rtstring));
     			getContentResolver().update(puri, pvalues, null, null);
+    			
+    			Toast.makeText(this, "Ringtone set for " + pc.getString(pc.getColumnIndexOrThrow(People._ID)), Toast.LENGTH_SHORT).show();
         	} while (pc.moveToNext());
         }
         finish();
@@ -198,45 +222,29 @@ public class FinleyBreeseActivity extends Activity {
     		Log.v(TAG, "entered onDestroy");
     }
     
-    /** Returns the location where ringtones should be saved. */
-    protected File getRingtoneDir() {
-    	File rtpath;
-    	
-		// boolean mExternalStorageAvailable = false;
-		// boolean mExternalStorageWriteable = false;
-    	String badDefault = "/sdcard/";
-		String state = Environment.getExternalStorageState();
-		
-		if (Environment.MEDIA_MOUNTED.equals(state)) {
-			// We can read and write the media
-			if (logging == true)
-				Log.d(TAG, "media mounted");
-			rtpath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES);
-			// mExternalStorageAvailable = mExternalStorageWriteable = true;
-		} else if (Environment.MEDIA_MOUNTED_READ_ONLY.equals(state)) {
-			// We can only read the media
-			Log.w(TAG, "media mounted read only");
-			rtpath = new File(badDefault);
-			// mExternalStorageAvailable = true;
-			// mExternalStorageWriteable = false;
-		} else {
-			// Something else is wrong
-			Log.e(TAG, "external storage unavailable");
-			rtpath = new File(badDefault);
-			// mExternalStorageAvailable = mExternalStorageWriteable = false;
-		}
-		if (rtpath.exists()) {
-			if (rtpath.isDirectory()) {
-				if (logging == true)
-					Log.v(TAG, "rtpath is a directory");
-			} else {
-				Log.e(TAG, "rtpath is not a directory!");
-			}
-		} else {
-			rtpath.mkdirs();
-			Log.w(TAG, "created rtpath directory");
-		}
-	
-		return rtpath;
+    /** show the final alert - thank you ringdroid */
+    private void showFinalAlert(CharSequence message) {
+    	// TODO: replace ANGRY and OK with proper values
+    	new AlertDialog.Builder(FinleyBreeseActivity.this)
+    		.setTitle("ANGRY")
+    		.setMessage(message)
+    		.setPositiveButton("OK", 
+    				new DialogInterface.OnClickListener() {
+    				public void onClick(DialogInterface dialog,
+    						int whichButton) {
+    					finish();
+    				}
+    		})
+    		.setCancelable(false)
+    		.show();
+    }
+    
+    /** select correct contact content uri - thank you ringdroid */
+    private Uri getContactContentUri() {
+    	if (Build.VERSION.SDK_INT >= 5) {
+    		return Uri.parse("content://com.android.contacts/contacts");
+    	} else {
+    		return Contacts.People.CONTENT_URI;
+    	}
     }
 }
