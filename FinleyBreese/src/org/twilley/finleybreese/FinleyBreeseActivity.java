@@ -4,6 +4,7 @@ import org.twilley.finleybreese.Morse;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -15,9 +16,13 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.database.Cursor;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.ContactsContract;
 import android.provider.ContactsContract.CommonDataKinds.Note;
 import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.RawContacts;
@@ -57,6 +62,9 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 	private int samplerate;
 	private int channels;
 	
+	// ringtone hash
+	private HashMap<String, Uri> rthash;
+	
 	// object which does the actual text->Morse translation
 	private Morse myMorse;
 	
@@ -94,6 +102,7 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 		// Build Morse object
 		Toast.makeText(this, "Generating waveforms...", Toast.LENGTH_SHORT).show();
 		myMorse = buildMorseFromPreferences();
+		rthash = buildRingtoneHash();
 		Toast.makeText(this, "Waveform generation complete!", Toast.LENGTH_SHORT).show();
 		
 		// Configure button!
@@ -151,7 +160,7 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     	savePreferences();    	
     }
 
-    /** The final call you receive before your activity is destroyed. */
+    /** The final call you receivandroid file path to ringtone namee before your activity is destroyed. */
     @Override
     protected void onDestroy() {
     	super.onDestroy();
@@ -164,10 +173,11 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     	// TODO: figure out how to add notes logic here
     	// step one: include notes in projection
     	// step two: only match if notes match regular expression
-    	String[] projection = {RawContacts._ID, RawContacts.ACCOUNT_NAME, RawContacts.CUSTOM_RINGTONE};
-    	String selection = "";
-    	String[] selectionargs = {""};
-    	String sortorder = "";
+    	Log.v(TAG, "onCreateLoader reached");
+    	String[] projection = {RawContacts._ID, RawContacts.CONTACT_ID, RawContacts.CUSTOM_RINGTONE};
+    	String selection = null;
+    	String[] selectionargs = null;
+    	String sortorder = null;
     	return new CursorLoader(this, RawContacts.CONTENT_URI, projection, selection, selectionargs, sortorder);
     }
     
@@ -185,25 +195,40 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
       	Pattern pattern = Pattern.compile(NotesRegex);
 
     	if (cursor != null && cursor.getCount() > 0) {
-    		Log.v(TAG, "oh please yes yes");
     		for (cursor.moveToFirst(); !cursor.isAfterLast(); cursor.moveToNext()) {
-    			String rawContactId = cursor.getString(0);
-    			String rawContactName = cursor.getString(1);
-    			String rawContactCustomRingtone = cursor.getString(2);
+    			String rawContactId = cursor.getString(cursor.getColumnIndex(RawContacts._ID));
+    			String rawContactContactId = cursor.getString(cursor.getColumnIndex(RawContacts.CONTACT_ID));
+    			Uri rawContactCustomRingtone = Uri.parse(cursor.getString(cursor.getColumnIndex(RawContacts.CUSTOM_RINGTONE)));
+    			// get display name based on contact ID
+    			String rawContactDisplayName = "";
+    			Cursor dnCursor = null;
+    			try {
+    				String[] projection = new String[] {ContactsContract.Contacts._ID, ContactsContract.Contacts.DISPLAY_NAME};
+    				String selection = ContactsContract.Contacts._ID + "=?";
+    				String[] selectionArgs = new String[] {rawContactContactId};
+    				String sortOrder = "";
+    				dnCursor = getContentResolver().query(ContactsContract.Contacts.CONTENT_URI, projection, selection, selectionArgs, sortOrder);
+    				if (dnCursor != null && dnCursor.getCount() > 0) {
+    					for (dnCursor.moveToFirst(); !dnCursor.isAfterLast(); dnCursor.moveToNext())
+    						rawContactDisplayName += dnCursor.getString(dnCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME));
+    				}
+    						
+    			} finally {
+    				if (dnCursor != null)
+    					dnCursor.close();
+    			}
     			// get notes if any -- remove if step one complete
     			String notes = "";
     			Cursor noteCursor = null;
     			try {
-    				String [] projection = new String[] {Data._ID, Note.NOTE};
+    				String[] projection = new String[] {Data._ID, Note.NOTE};
     				String selection = Data.RAW_CONTACT_ID + "=?" + " AND " + Data.MIMETYPE + "='" + Note.CONTENT_ITEM_TYPE + "'";
-    				String[] selectionargs = new String[] {rawContactId};
-    				String sortorder = "";
-    				noteCursor = getContentResolver().query(Data.CONTENT_URI, projection, selection, selectionargs, sortorder); 
-    				if (noteCursor != null && noteCursor.moveToFirst()) {
-    					while (!noteCursor.isAfterLast()) {
+    				String[] selectionArgs = new String[] {rawContactId};
+    				String sortOrder = "";
+    				noteCursor = getContentResolver().query(Data.CONTENT_URI, projection, selection, selectionArgs, sortOrder); 
+    				if (noteCursor != null && noteCursor.getCount() > 0) {
+    					for (noteCursor.moveToFirst(); !noteCursor.isAfterLast(); noteCursor.moveToNext())
     						notes += noteCursor.getString(noteCursor.getColumnIndex(Note.NOTE));
-    						noteCursor.moveToNext();
-    					}
     				}
     			} finally {
     				if (noteCursor != null)
@@ -212,7 +237,8 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     			// no notes, don't bother
     			// TODO: learn how to jam this crap into initial search thing!
     			if (notes == "")
-    				continue;// MAGIC
+    				continue;
+    			Log.v(TAG, " - ID: " + rawContactId + ", name: " + rawContactDisplayName + ", ringtone: " + rawContactCustomRingtone);
     			
     			// now that we have the notes, lowercase 'em.
     			notes = notes.toLowerCase(Locale.US);
@@ -233,17 +259,25 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     			// does a ringtone exist that matches the ringtone string?
 				File rtfile = new File(rtpath, rtstring + ".wav");
 				String rtpath = rtfile.getAbsolutePath();
+				Log.v(TAG, "rtpath is " + rtpath);
+				Log.v(TAG, "rawContactCustomRingtone is " + rawContactCustomRingtone);
 				
 				// if file exists, we presume it is correct!
 				if (rtfile.exists()) {
-    				if (rawContactCustomRingtone != "" && rawContactCustomRingtone.equals(rtpath))
+    				if (rawContactCustomRingtone.equals(rthash.get(rtstring))) {
     					continue;
-    			} else {
+    				}
+      				if (noteCursor != null && noteCursor.getCount() > 0) {
+    					for (noteCursor.moveToFirst(); !noteCursor.isAfterLast(); noteCursor.moveToNext())
+    						notes += noteCursor.getString(noteCursor.getColumnIndex(Note.NOTE));
+    				}
+ 	} else {
     				// build ringtone
     				// TODO: confirm this is sane
     				try {
         				myMorse.createFile(rtfile, rtstring);
         				// TODO: identify it somehow as as a ringtone, of course!
+        				rthash.put(rtstring, Uri.parse(rtpath));
 					} catch (IOException e) {
 	    				Log.e(TAG, " exiting before corrupting hash or assigning ringtone! ", e);
 	    				continue;
@@ -256,7 +290,7 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     			values.put(RawContacts.CUSTOM_RINGTONE, rtpath);
     			getContentResolver().update(RawContacts.CONTENT_URI, values, null, null);
     			
-    			Toast.makeText(this, "Ringtone set for " + rawContactName, Toast.LENGTH_SHORT).show();
+    			Toast.makeText(this, "Ringtone set for " + rawContactDisplayName, Toast.LENGTH_SHORT).show();
     		}
     	}
     	if (logging == true)
@@ -265,7 +299,7 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     
     /** implementing onLoaderReset */
     public void onLoaderReset(Loader<Cursor> cursorLoader) {
-    	
+    	Log.v(TAG, "onLoaderReset reached");
     }
     
     /** show the final alert - thank you ringdroid */
@@ -315,5 +349,27 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 		editor.putInt(getString(R.string.saved_samplerate), samplerate);
 		editor.putInt(getString(R.string.saved_channels), channels);		
     	editor.commit();
+    }
+    
+    /** build ringtone hash */
+    private HashMap<String, Uri> buildRingtoneHash() {
+    	/* for every ringtone, key = title, value = Uri */
+    	HashMap<String, Uri> retval = new HashMap<String, Uri>();
+    	
+    	RingtoneManager rtm = new RingtoneManager(this);
+    	rtm.setType(RingtoneManager.TYPE_RINGTONE);
+    	Cursor rtc = rtm.getCursor();
+		if (rtc != null && rtc.getCount() > 0) {
+			for (rtc.moveToFirst(); !rtc.isAfterLast(); rtc.moveToNext()) {
+				String key = rtc.getString(RingtoneManager.TITLE_COLUMN_INDEX);
+				Log.v(TAG, "key is " + key);
+				Uri uri = Uri.parse(rtc.getString(RingtoneManager.URI_COLUMN_INDEX));
+				String id = rtc.getString(RingtoneManager.ID_COLUMN_INDEX);
+				Uri value = Uri.withAppendedPath(uri, id);
+				Log.v(TAG, "value is " + value);
+				retval.put(key, value);
+			}
+		}
+		return retval;
     }
 }
