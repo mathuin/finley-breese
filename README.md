@@ -7,10 +7,10 @@ An Android application that generates contact-specific ringtones in Morse code.
 Quick start
 -----------
 
-1.  Add a custom field named 'FB' to a contact on your list.
+1.  Add a notes field to a contact on your list, set it to "ringtone: paris", and save the contact.
 2.  Run FB, and press the big button!
 
-FB will now generate a custom ringtone for that contact.  The ringtone will be whatever was typed into the custom field converted to Morse code.
+FB will now generate a custom ringtone for that contact.  The ringtone will be the word "paris" translated into Morse code.
 
 
 What other features are planned?
