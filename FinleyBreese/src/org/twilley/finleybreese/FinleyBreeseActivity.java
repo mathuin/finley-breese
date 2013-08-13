@@ -16,7 +16,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.database.Cursor;
-import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
@@ -51,9 +50,9 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 	private static final int DEFAULT_PITCH = 880;
 	private static final int DEFAULT_CSPEED = 20;
 	private static final int DEFAULT_SPEED = 13;
-	private static final int DEFAULT_BITWIDTH = 32;
+	private static final int DEFAULT_BITWIDTH = 16;
 	private static final int DEFAULT_SAMPLERATE = 44100;
-	private static final int DEFAULT_CHANNELS = 2;
+	private static final int DEFAULT_CHANNELS = 1;
 	
 	// - parameters
 	private int pitch;
@@ -247,9 +246,7 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 					if (rtabs.equals(rthash.get(rtstring)))
     					continue;
 				} else {
-    				// build ringtone
-    				// TODO: confirm this is sane
-    				try {
+					try {
         				myMorse.createFile(rtfile, rtstring);
         				ContentValues rtvalues = new ContentValues();
         				rtvalues.put(MediaStore.MediaColumns.DATA, rtabs);
@@ -350,8 +347,8 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 		bitwidth = sharedPref.getInt(getString(R.string.saved_bitwidth), DEFAULT_BITWIDTH);
 		samplerate = sharedPref.getInt(getString(R.string.saved_samplerate), DEFAULT_SAMPLERATE);
 		channels = sharedPref.getInt(getString(R.string.saved_channels), DEFAULT_CHANNELS);		
-
-    	myMorse = new Morse(pitch, cspeed, speed, bitwidth, samplerate, channels);
+    	// myMorse = new Morse(pitch, cspeed, speed, bitwidth, samplerate, channels);
+		myMorse = new Morse(pitch, cspeed, speed);
 		return myMorse;
     }
     

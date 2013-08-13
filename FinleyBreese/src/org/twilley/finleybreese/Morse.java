@@ -65,9 +65,9 @@ public class Morse {
 	private static final int DEFAULT_PITCH = 800;
 	private static final int DEFAULT_CSPEED = 20;
 	private static final int DEFAULT_SPEED = 13;
-	private static final int DEFAULT_BITWIDTH = 32;
+	private static final int DEFAULT_BITWIDTH = 16;
 	private static final int DEFAULT_SAMPLERATE = 44100;
-	private static final int DEFAULT_CHANNELS = 2;
+	private static final int DEFAULT_CHANNELS = 1;
 	
 	// the length of the word 'paris' in dits
 	private static final int PARIS_LENGTH = 50;
