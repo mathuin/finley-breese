@@ -23,7 +23,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.CommonDataKinds.Note;
-import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.RawContacts;
 import android.provider.MediaStore;
 import android.support.v4.app.FragmentActivity;
@@ -46,21 +45,15 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 	SharedPreferences sharedPref;
 	SharedPreferences.Editor editor;
 
-	//  - constants
+	// - constants
 	private static final int DEFAULT_PITCH = 880;
 	private static final int DEFAULT_CSPEED = 20;
 	private static final int DEFAULT_SPEED = 13;
-	private static final int DEFAULT_BITWIDTH = 16;
-	private static final int DEFAULT_SAMPLERATE = 44100;
-	private static final int DEFAULT_CHANNELS = 1;
 	
 	// - parameters
 	private int pitch;
 	private int cspeed;
 	private int speed;
-	private int bitwidth;
-	private int samplerate;
-	private int channels;
 	
 	// ringtone hash
 	private HashMap<String, String> rthash;
@@ -169,17 +162,13 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     }
     
     /** implementing onCreateLoader */				
-
     public Loader<Cursor> onCreateLoader(int i, Bundle bundle) {
-    	// TODO: figure out how to add notes logic here
-    	// step one: include notes in projection
-    	// step two: only match if notes match regular expression
     	Log.v(TAG, "onCreateLoader reached");
-    	String[] projection = {RawContacts._ID, RawContacts.CONTACT_ID, RawContacts.CUSTOM_RINGTONE};
-    	String selection = null;
-    	String[] selectionargs = null;
+    	String[] projection = {	ContactsContract.Data.RAW_CONTACT_ID, ContactsContract.Data.CONTACT_ID,	ContactsContract.Data.DISPLAY_NAME,	ContactsContract.Data.CUSTOM_RINGTONE, ContactsContract.Data.DATA1 };
+    	String selection = ContactsContract.Data.MIMETYPE + "='" + Note.CONTENT_ITEM_TYPE + "' AND " + ContactsContract.Data.DATA1 + " LIKE ?";
+    	String[] selectionargs = { "%RINGTONE%" };
     	String sortorder = null;
-    	return new CursorLoader(this, RawContacts.CONTENT_URI, projection, selection, selectionargs, sortorder);
+    	return new CursorLoader(this, ContactsContract.Data.CONTENT_URI, projection, selection, selectionargs, sortorder);
     }
     
     /** implementing onLoadFinished */
@@ -196,35 +185,15 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
       	Pattern pattern = Pattern.compile(NotesRegex);
 
     	if (cursor != null && cursor.getCount() > 0) {
-    		for (cursor.moveToFirst(); !cursor.isAfterLast(); cursor.moveToNext()) {
-    			String rawContactId = cursor.getString(cursor.getColumnIndex(RawContacts._ID));
-    			String rawContactContactId = cursor.getString(cursor.getColumnIndex(RawContacts.CONTACT_ID));
-    			String rawContactCustomRingtone = cursor.getString(cursor.getColumnIndex(RawContacts.CUSTOM_RINGTONE));
-    			
-    			// get notes if any -- remove if step one complete
-    			String notes = "";
-    			Cursor noteCursor = null;
-    			try {
-    				String[] projection = new String[] {Data._ID, Note.NOTE};
-    				String selection = Data.RAW_CONTACT_ID + "=?" + " AND " + Data.MIMETYPE + "='" + Note.CONTENT_ITEM_TYPE + "'";
-    				String[] selectionArgs = new String[] {rawContactId};
-    				String sortOrder = "";
-    				noteCursor = getContentResolver().query(Data.CONTENT_URI, projection, selection, selectionArgs, sortOrder); 
-    				if (noteCursor != null && noteCursor.getCount() > 0) {
-    					for (noteCursor.moveToFirst(); !noteCursor.isAfterLast(); noteCursor.moveToNext())
-    						notes += noteCursor.getString(noteCursor.getColumnIndex(Note.NOTE));
-    				}
-    			} finally {
-    				if (noteCursor != null)
-    					noteCursor.close();
-    			}
-    			// no notes, don't bother
-    			// TODO: learn how to jam this crap into initial search thing!
-    			if (notes == "")
-    				continue;
-    			
+    		while (cursor.moveToNext()) {
+    			String rawContactId = cursor.getString(cursor.getColumnIndex(ContactsContract.Data.RAW_CONTACT_ID));
+    			String rawContactContactId = cursor.getString(cursor.getColumnIndex(ContactsContract.Data.CONTACT_ID));
+    			String rawContactDisplayName = cursor.getString(cursor.getColumnIndex(ContactsContract.Data.DISPLAY_NAME));
+    			String rawContactCustomRingtone = cursor.getString(cursor.getColumnIndex(ContactsContract.Data.CUSTOM_RINGTONE));
+    			String rawContactNotes = cursor.getString(cursor.getColumnIndex(ContactsContract.Data.DATA1));
+    			    			
     			// now that we have the notes, lowercase 'em.
-    			notes = notes.toLowerCase(Locale.US);
+    			String notes = rawContactNotes.toLowerCase(Locale.US);
     			
     			// do their notes contain the matching string?
     			// remove if step two complete
@@ -234,79 +203,39 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     			else
     				continue;
 
+   				if (logging == true)
+					Log.v(TAG, " - ID: " + rawContactId + ", name: " + rawContactDisplayName + ", rtstring: " + rtstring + ", ringtone: " + rawContactCustomRingtone);			
+
     			// does a ringtone exist that matches the ringtone string?
 				File rtfile = new File(rtpath, rtstring + ".wav");
 				String rtabs = rtfile.getAbsolutePath();
-				Log.v(TAG, "rtabs is " + rtabs);
-				Log.v(TAG, "rthash.get(" + rtstring + ") is " + rthash.get(rtstring));
-				
+
 				// if file exists, we presume it is correct!
 				if (rtfile.exists()) {
-					// if path is already in the hash, there's no need to assign it, is there?
 					if (rtabs.equals(rthash.get(rtstring)))
     					continue;
 				} else {
 					try {
         				myMorse.createFile(rtfile, rtstring);
-        				ContentValues rtvalues = new ContentValues();
-        				rtvalues.put(MediaStore.MediaColumns.DATA, rtabs);
-        				rtvalues.put(MediaStore.MediaColumns.TITLE, rtstring);
-        				rtvalues.put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav");
-        				rtvalues.put(MediaStore.Audio.Media.ARTIST, "Finley Breese");
-        				rtvalues.put(MediaStore.Audio.Media.IS_RINGTONE, true);
-        				Uri rturi = MediaStore.Audio.Media.getContentUriForPath(rtabs);
-        				getContentResolver().delete(rturi, MediaStore.MediaColumns.DATA + "=\"" + rtabs + "\"", null);
-        				Uri newrturi = getContentResolver().insert(rturi, rtvalues);
-        				Log.v(TAG, "newrturi is " + newrturi);
+        				addRingtoneToMediaStore(rtabs, rtstring);
         				rthash.put(rtstring, rtabs);
 					} catch (IOException e) {
 	    				Log.e(TAG, " exiting before corrupting hash or assigning ringtone! ", e);
 	    				continue;
 					}
     			}
-				
-				Uri rtUri = MediaStore.Audio.Media.getContentUriForPath(rtabs);
-				Log.d(TAG, "rtUri is " + rtUri);
-				String[] rtUriproj = { MediaStore.Audio.AudioColumns._ID };
-				String rtUrisel = MediaStore.Audio.AudioColumns.DATA + " LIKE ?";
-				String[] rtUriselargs = { rtabs };
-				Cursor rtcursor = getContentResolver().query(rtUri, rtUriproj, rtUrisel, rtUriselargs, null);
-				rtcursor.moveToFirst();
-				String rtUriId = rtcursor.getString(rtcursor.getColumnIndex(MediaStore.Audio.AudioColumns._ID));
-				Uri newrtUri = Uri.withAppendedPath(rtUri, rtUriId);
+								
 				// assign ringtone here!
 				Uri contactUri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, rawContactContactId);
     			ContentValues values = new ContentValues();
     			values.put(RawContacts._ID, rawContactId);
-    			values.put(RawContacts.CUSTOM_RINGTONE, newrtUri.toString());
+    			values.put(RawContacts.CUSTOM_RINGTONE, getRingtoneUri(rtabs));
     			getContentResolver().update(contactUri, values, null, null);
 
-    			// get display name based on contact ID
-    			String rawContactDisplayName = "";
-    			Cursor dnCursor = null;
-    			try {
-    				String[] projection = new String[] {ContactsContract.Contacts._ID, ContactsContract.Contacts.DISPLAY_NAME};
-    				String selection = ContactsContract.Contacts._ID + "=?";
-    				String[] selectionArgs = new String[] {rawContactContactId};
-    				String sortOrder = "";
-    				dnCursor = getContentResolver().query(ContactsContract.Contacts.CONTENT_URI, projection, selection, selectionArgs, sortOrder);
-    				if (dnCursor != null && dnCursor.getCount() > 0) {
-    					for (dnCursor.moveToFirst(); !dnCursor.isAfterLast(); dnCursor.moveToNext())
-    						rawContactDisplayName += dnCursor.getString(dnCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME));
-    				}
-    			} finally {
-    				if (dnCursor != null)
-    					dnCursor.close();
-    			}
-
-				Log.v(TAG, " - ID: " + rawContactId + ", name: " + rawContactDisplayName + ", rtstring: " + rtstring + ", ringtone: " + rawContactCustomRingtone);
-				
     			Toast.makeText(this, "Ringtone set for " + rawContactDisplayName, Toast.LENGTH_SHORT).show();
     		}
     	}
-    	if (logging == true)
-    		Log.v(TAG, "onLoadFinished exited");
-    	finish();
+    	Toast.makeText(this, "All ringtones set!", Toast.LENGTH_SHORT).show();
     }
     
     /** implementing onLoaderReset */
@@ -344,10 +273,6 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
 		pitch = sharedPref.getInt(getString(R.string.saved_pitch), DEFAULT_PITCH);
 		cspeed = sharedPref.getInt(getString(R.string.saved_cspeed), DEFAULT_CSPEED);
 		speed = sharedPref.getInt(getString(R.string.saved_speed), DEFAULT_SPEED);
-		bitwidth = sharedPref.getInt(getString(R.string.saved_bitwidth), DEFAULT_BITWIDTH);
-		samplerate = sharedPref.getInt(getString(R.string.saved_samplerate), DEFAULT_SAMPLERATE);
-		channels = sharedPref.getInt(getString(R.string.saved_channels), DEFAULT_CHANNELS);		
-    	// myMorse = new Morse(pitch, cspeed, speed, bitwidth, samplerate, channels);
 		myMorse = new Morse(pitch, cspeed, speed);
 		return myMorse;
     }
@@ -356,46 +281,67 @@ public class FinleyBreeseActivity extends FragmentActivity implements LoaderMana
     private void savePreferences() {
 		editor.putInt(getString(R.string.saved_pitch), pitch);
 		editor.putInt(getString(R.string.saved_cspeed), cspeed);
-		editor.putInt(getString(R.string.saved_speed), speed);
-		editor.putInt(getString(R.string.saved_bitwidth), bitwidth);
-		editor.putInt(getString(R.string.saved_samplerate), samplerate);
-		editor.putInt(getString(R.string.saved_channels), channels);		
+		editor.putInt(getString(R.string.saved_speed), speed);		
     	editor.commit();
     }
-    
+
     /** build ringtone hash */
     private HashMap<String, String> buildRingtoneHash() {
-    	/* for every ringtone, key = title, value = Uri */
     	HashMap<String, String> retval = new HashMap<String, String>();
-    	
     	RingtoneManager rtm = new RingtoneManager(this);
     	rtm.setType(RingtoneManager.TYPE_RINGTONE);
     	Cursor rtc = rtm.getCursor();
 		if (rtc != null && rtc.getCount() > 0) {
-			for (rtc.moveToFirst(); !rtc.isAfterLast(); rtc.moveToNext()) {
+			while (rtc.moveToNext()) {
 				String key = rtc.getString(RingtoneManager.TITLE_COLUMN_INDEX);
-				Log.v(TAG, "key is " + key);
 				Uri uri = Uri.parse(rtc.getString(RingtoneManager.URI_COLUMN_INDEX));
 				String id = rtc.getString(RingtoneManager.ID_COLUMN_INDEX);
 				Uri uriplusid = Uri.withAppendedPath(uri, id);
-				String value = fromRingtoneToFilename(uriplusid);
-				Log.v(TAG, "value is " + value);
+				String value = getRingtoneFilename(uriplusid);
 				retval.put(key, value);
 			}
 		}
+		rtc.close();
 		return retval;
     }
     
-    /** given a ringtone URI, return a ringtone file location */
-    private String fromRingtoneToFilename(Uri ringtone) {
-    	Log.v(TAG, "ringtone in = " + ringtone);
+    /** given a ringtone URI, return the corresponding absolute path */
+    private String getRingtoneFilename(Uri ringtone) {
 		String[] proj = { MediaStore.Audio.Media.DATA };
 		Cursor cursor = getContentResolver().query(ringtone, proj, null, null, null);
 		int column_index = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA);
 		cursor.moveToFirst();
 		String value = cursor.getString(column_index);
 		cursor.close();
-		Log.v(TAG, "value out = " + value);
 		return value;
+    }
+    
+    /** given an absolute path, return the corresponding content Uri */
+	private String getRingtoneUri(String rtabs) {
+		Uri rtUri = MediaStore.Audio.Media.getContentUriForPath(rtabs);
+		String[] rtUriproj = { MediaStore.Audio.AudioColumns._ID };
+		String rtUrisel = MediaStore.Audio.AudioColumns.DATA + " LIKE ?";
+		String[] rtUriselargs = { rtabs };
+		Cursor rtcursor = getContentResolver().query(rtUri, rtUriproj, rtUrisel, rtUriselargs, null);
+		rtcursor.moveToFirst();
+		String rtUriId = rtcursor.getString(rtcursor.getColumnIndex(MediaStore.Audio.AudioColumns._ID));
+		rtcursor.close();
+		Uri newrtUri = Uri.withAppendedPath(rtUri, rtUriId);
+		String retval = newrtUri.toString();
+		return retval;
+	}
+
+	/** given an absolute path and ringtone string, add that ringtone to the media store */
+    private void addRingtoneToMediaStore(String rtabs, String rtstring) {
+		Uri rtUri = MediaStore.Audio.Media.getContentUriForPath(rtabs);
+		ContentValues rtvalues = new ContentValues();
+		rtvalues.put(MediaStore.MediaColumns.DATA, rtabs);
+		rtvalues.put(MediaStore.MediaColumns.TITLE, "FB - " + rtstring);
+		rtvalues.put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav");
+		rtvalues.put(MediaStore.Audio.Media.ARTIST, "Finley Breese");
+		rtvalues.put(MediaStore.Audio.Media.IS_RINGTONE, true);
+		getContentResolver().delete(rtUri, MediaStore.MediaColumns.DATA + "=\"" + rtabs + "\"", null);
+		@SuppressWarnings("unused")
+		Uri newrtUri = getContentResolver().insert(rtUri, rtvalues);
     }
 }
